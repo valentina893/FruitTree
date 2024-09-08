@@ -18,8 +18,11 @@ root.grid_columnconfigure(2, weight=1)
 root.grid_columnconfigure(3, weight=1)
 root.grid_columnconfigure(4, weight=1)
 
-exit_button = Button(root, text="exit", command=root.quit)
+exit_button = Button(root, text="exit", command=lambda: close_program(server))
 exit_button.grid(row=4, column=4, sticky="e, s")
+
+title = Label(root, text="FruitTree", font=('TkDefaultFont', 30),fg='yellow')
+title.grid(row=0, column=2)
 
 '''FRONT-END COMPONENTS BELOW'''
 
@@ -32,7 +35,30 @@ def next_screen(pos):
     Function: switches UI to next visual screen function in a sequence of 1 -> 2 -> 3. NOT to be confused with a future quit_fight function that goes from 3 -> 1.
     '''
 
+    print('next_screen has been called')
+
+    for i in curr_widgets:
+
+        i.destroy()
+
+    curr_widgets.clear()
+
     screen_seq[pos+1]()
+
+def prev_screen(pos):
+    '''
+    Function: switches UI to next visual screen function in a sequence of 2 -> 1. NOT to be confused with quit_fight function.
+    '''
+
+    print('prev_screen has been called')
+
+    for i in curr_widgets:
+
+        i.destroy()
+    
+    curr_widgets.clear()
+
+    screen_seq[pos-1]()
 
 def screen1():
     '''
@@ -42,15 +68,8 @@ def screen1():
     Fruit Buttons: tied fruit_button function that assigns data to user_dict.
     '''
 
-    if len(curr_widgets) > 0:
+    print('screen1 has been called')
 
-        for i in curr_widgets:
-
-            i.destroy()
-        
-        curr_widgets.clear()
-
-    title = Label(root, text="FruitTree", font=('TkDefaultFont', 30),fg='yellow')
     usernameLabel = Label(root, text="username:")
     usernameInput = Entry(root)
     portLabel = Label(root, text="port:")
@@ -68,7 +87,6 @@ def screen1():
     orange = Button(fruitContainer, text="orange", command=lambda: fruit_buttons(orange, "orange"))
     fruitError = Label(root, text=None, font=('TkDefaultFont', 8))
 
-    title.grid(row=0, column=2)
     usernameLabel.grid(row=1, column=1, sticky="e")
     usernameInput.grid(row=1, column=2)
     portLabel.grid(row=2,column=1, sticky="e")
@@ -89,9 +107,6 @@ def screen1():
 
     root.update_idletasks()
 
-    fruit_buttons_list = [apple, mango, lemon, strawberry, banana, orange]
-
-    curr_widgets.append(title) # don't get rid of just yet!!
     curr_widgets.append(usernameLabel)
     curr_widgets.append(usernameInput)
     curr_widgets.append(portLabel)
@@ -109,16 +124,13 @@ def screen2():
     Appearance: Title, Loading_Label, Success_Label, Accept_button, kick_button
     '''
 
-    for i in curr_widgets[1:]:
-
-        i.destroy()
-        curr_widgets.remove(i)
+    print('screen2 has been called')
 
     loading = Label(root, text=f"hello, {user_dict['name']}. please wait for {user_dict['loading']}")
     status = Label(root)
     # accept = Button(root, text="accept", command=None) # host exclusive
     # kick = Button(root, text="kick", command=None) # host exclusive
-    back_button = Button(root, text="back", command=None)
+    back_button = Button(root, text="back", command=lambda: None)
 
     loading.grid(row=1, column=2)
     status.grid(row=2,column=2)
@@ -133,6 +145,8 @@ def screen2():
 screen_seq = [screen1, screen2]
 
 '''BACK-END COMPONENTS BELOW'''
+
+server = None
 
 generic_moves = {
 
@@ -154,7 +168,7 @@ user_dict = {
 
 # HOST Functions
 
-def host_server(username, port):
+def host_server(username, port): # FIXME: unknown causes loading ball and screen glitch
     '''
     Function: Creates a server for the host after receiving the username, port, and fruit.
     Activated by: screen1's host button widget.
@@ -162,13 +176,13 @@ def host_server(username, port):
     Parameters: username and port (obtained by respective inputfields)
     '''
 
-    global user_dict
+    print('host_server has been called')
 
-    if input_check(username, port, user_dict, curr_widgets[7], curr_widgets[8], curr_widgets[10]) == True:
+    global user_dict, server
 
-        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server.bind((socket.gethostname(), int(port)))
-        server.listen(1) # server has been created
+    if input_check(username, port, user_dict, curr_widgets[6], curr_widgets[7], curr_widgets[9]) == False:
+
+        user_dict["loading"] = "joining player."
 
         user_dict["name"] = username 
         sent_username = pickle.dumps(username) # gets ready to send username
@@ -176,13 +190,55 @@ def host_server(username, port):
         sent_fruitname = pickle.dumps(user_dict["fruit_name"]) # gets ready to send fruitname and transplants fruit stats
         user_dict["fruit_dict"] = copy.copy(generic_moves)
 
-        user_dict["loading"] = "joining player."
+        next_screen(0)
 
-        screen2()
+        print('UI blocked by socket')
+
+        curr_widgets[1].configure(text="waiting for joining player")
+
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind((socket.gethostname(), int(port)))
+        server.listen(1)
+        #server.setblocking(False)
+        
+
+
+        #try:
+
+        clientsocket, address = server.accept()
+
+        #except BlockingIOError:
+
+        curr_widgets[1].configure(text="connected to joining player")
+
+        '''else:
+
+            recv_pickle_user = clientsocket.recv(200)
+            recv_pickle_fruit = clientsocket.recv(200)
+            recv_username = pickle.loads(recv_pickle_user)
+            recv_fruit = pickle.loads(recv_pickle_fruit)
+            clientsocket.sendall(sent_username)
+            clientsocket.sendall(sent_fruitname)
+
+            curr_widgets[1].configure(text=f"user {recv_username} wants to join! do you accept?")'''       
+
+def close_program(server):
+
+    print('close_program has been called')
+
+    if server == None:
+
+        root.destroy()
+
+    else:
+
+        server.close()
+        root.destroy
 
 # JOIN Functions
 
-def join_server(username, port):
+def join_server(username, port): # FIXME: try statement causes loading ball and screen glitch.
     '''
     Function: Searches for and joins server after collecting username, port, and fruit.
     Activated by: screen1's join button widget.
@@ -190,9 +246,11 @@ def join_server(username, port):
     Parameters: username and port (obtained by respective inputfields)
     '''
 
+    print('join_server has been called')
+
     global user_dict
 
-    if input_check(username, port, user_dict, curr_widgets[7], curr_widgets[8], curr_widgets[10]) == True:
+    if input_check(username, port, user_dict, curr_widgets[6], curr_widgets[7], curr_widgets[9]) == False:
 
         user_dict["name"] = username 
         sent_username = pickle.dumps(username) # gets ready to send username
@@ -202,114 +260,116 @@ def join_server(username, port):
 
         user_dict["loading"] = "host."
 
-        searching = False
+        next_screen(0)
 
-        while searching:
+        searching = True
 
-            try:
-                
-                server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                server.connect((socket.gethostname(), int(port)))
+        #while searching:
+            
+        #try: # somehow fucks up everything
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.connect((socket.gethostname(), int(port)))
+        #except ConnectionRefusedError:
 
-            except:
-                
-                curr_widgets[2].configure(text=f"no host with port: {port}")
-                searching = False
+        searching = False               
 
 # GENERIC FUNCTIONS
 
-def input_check(username, port, user_dct, error1, error2, error3): # FIXME: checking process for port.
+def input_check(username, port, user_dct, error1, error2, error3):
     '''
     Function: Checks if user has entered a valid username, port, and fruit
     Activated by: host/join server functions
     Followed by: rest of host join server functions that will continue if input_check returns True.
     '''
 
+    print('input_check has been called')
+
+    errors = False
+
     if len(username) <= 10 and len(username) > 0:
 
-        error1.configure(text="")
+        try:
 
-        if len(port) == 4:
+            error1.configure(text="")
+        
+        except:
+
+            pass
+
+    else:
+
+        try:
+
+            error1.configure(text="*use 1 - 10 chars*\nfor username")
+
+        except:
+
+            pass
+
+        else:
+
+            errors = True
+
+    if len(port) == 4:
+
+        try:
+
+            int(port)
+        
+        except ValueError:
+
+            error2.configure(text="*use 4-digit*\nnumber")
+
+        else:
 
             try:
 
-                int(port)
-            
-            except ValueError:
-
-                error2.configure(text="*use 4-digit*\nnumber")
-                pass
-
-            else:
-
                 error2.configure(text="")
 
-                if user_dct[list(user_dct.keys())[2]] != None:
+            except:
 
-                    error3.configure(text="")
-                    return True
-            
-                else:
+                pass
 
-                    error3.configure(text="*please choose fruit*")
-                    return False
-
-            if user_dct[list(user_dct.keys())[2]] != None:
-
-                error3.configure(text="")
-                return False
-            
-            else:
-
-                error3.configure(text="*please choose fruit*")
-                return False
-        
-        else:
-
-            error2.configure(text="*use 4-digit*\nnumber")
-            
-            if user_dct[list(user_dct.keys())[2]] != None:
-                
-                error3.configure(text="")
-                return False
-            
-            else:
-
-                error3.configure(text="*please choose fruit*")
-                return False
-    
     else:
 
-        error1.configure(text="*use 1 - 10 chars*\nfor username")
-        
-        if len(port) == 4 or isinstance(port, int) == True:
-
-            error2.configure(text="")
-
-            if user_dct[list(user_dct.keys())[2]] != None:
-
-                error3.configure(text="")
-                return False
-            
-            else:
-
-                error3.configure(text="*please choose fruit*")
-                return False
-        
-        else:
+        try:
 
             error2.configure(text="*use 4-digit*\nnumber")
+        
+        except:
+
+            pass
+
+        else:
+
+            errors = True
+
+    if user_dct[list(user_dct.keys())[2]] != None:
+
+        try:
+
+            error3.configure(text="")
+        
+        except:
+
+            pass
+
+    else:
+
+        try:
+
+            error3.configure(text="*please choose fruit*")
+        
+        except:
+
+            pass
+
+        else:
+
+            errors = True
+    
+    return errors
             
-            if user_dct[list(user_dct.keys())[2]] != None:
-
-                error3.configure(text="")
-                return False
-            
-            else:
-
-                error3.configure(text="*please choose fruit*")
-                return False
-
 def fruit_buttons(button, fruitname):
     '''
     Function: Sets user-dict to have fruit name and changes UI fruit button colors.
@@ -318,14 +378,20 @@ def fruit_buttons(button, fruitname):
     Parameters: button is the button pressed for activating fruit_buttons, fruit_name is a manual parameter.
     '''
 
+    print('fruit_button has been called')
+
     if user_dict['fruit_name'] == None:
 
         button.configure(fg="green")
 
     else:
         
-        user_dict["button"].configure(fg="black")
-        button.configure(fg="green")
+        try:
+            user_dict["button"].configure(fg="black")
+        except:
+            button.configure(fg="green")
+        else:
+            button.configure(fg="green")
 
     user_dict["fruit_name"] = fruitname
     user_dict["fruit_dict"] = copy.copy(generic_moves)
@@ -333,6 +399,6 @@ def fruit_buttons(button, fruitname):
 
 '''TESTING CODE'''
 
-screen1()
+screen_seq[0]()
 
 root.mainloop()
