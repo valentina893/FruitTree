@@ -86,6 +86,7 @@ def screen1():
     banana = Button(fruitContainer, text="banana", command=lambda: fruit_buttons(banana, "banana"))
     orange = Button(fruitContainer, text="orange", command=lambda: fruit_buttons(orange, "orange"))
     fruitError = Label(root, text=None, font=('TkDefaultFont', 8))
+    connectionHostError = Label(root, text=None, font=('TkDefaultFont', 15))
 
     usernameLabel.grid(row=1, column=1, sticky="e")
     usernameInput.grid(row=1, column=2)
@@ -97,6 +98,7 @@ def screen1():
     portError.grid(row=2, column=3, columnspan=2, sticky="w")
     fruitContainer.grid(row=3,column=1, columnspan=3)
     fruitError.grid(row=4,column=2, sticky="n")
+    connectionHostError.grid(row=4,column=2,sticky="s")
 
     apple.grid(row=0,column=0, padx=5, pady=5)
     mango.grid(row=0,column=1, padx=5, pady=5)
@@ -117,8 +119,9 @@ def screen1():
     curr_widgets.append(portError)
     curr_widgets.append(fruitContainer)
     curr_widgets.append(fruitError)
+    curr_widgets.append(connectionHostError)
 
-def screen2():
+def screen2(): # UNUSED
     '''
     Function: Loading screen while waiting for host or joining player. Will greet user in way dependent on if they are the host or joining player. Allows host to give permission to whoever joins.
     Appearance: Title, Loading_Label, Success_Label, Accept_button, kick_button
@@ -142,7 +145,50 @@ def screen2():
     curr_widgets.append(status)
     curr_widgets.append(back_button)
 
-screen_seq = [screen1, screen2]
+def screen3():
+    '''
+    Function: displays full battle screen with moves for user and enemy user, fruit, and hp
+    inclues: 
+        - User: surrounding frame, character_name, hp, attack, charge, quit_fight
+        - Enemy: surrounding frame, username, character_name, hp
+        - misc: status_message
+    '''
+
+    title.grid_forget()
+
+    user_frame = LabelFrame(root, text=f"{user_dict['fruit_name']}:") # user based widgets
+    user_hp = ttk.Progressbar(user_frame, orient='horizontal', mode='determinate', length=150, value=100)
+    attack = Button(user_frame, text="attack", fg="blue", command=None)
+    charge = Button(user_frame, text="charge", fg="red", command=None)
+    quit_fight = Button(root, text="quit fight", command=None)
+    message = Label(root, text=f"{enemy_dict['name']} has connected!", font = ("TkDefaultFont", 20))
+
+    enemy_title = Label(root, text=f"{enemy_dict['name']}'s {enemy_dict['fruit_name']}:", font=("TkDefaultFont", 15)) # enemy based widgets
+    enemy_hp = ttk.Progressbar(root, orient="horizontal", mode="determinate", length=300, value=100)
+
+    user_frame.grid(row=3, rowspan=2, column=0, columnspan=2)
+    user_hp.grid(row=0,column=0,columnspan=2)
+    attack.grid(row=1, column=0, padx=10, pady=10)
+    charge.grid(row=1, column=1, padx=10, pady=10)
+    quit_fight.grid(row=4, column=0, sticky="w, s")
+    message.grid(row=2, column=1, columnspan=3)
+    enemy_title.grid(row=0, column=3)
+    enemy_hp.grid(row=1,column=3, sticky="n")
+
+    root.update_idletasks()
+
+    curr_widgets.append(user_frame)
+    curr_widgets.append(user_hp)
+    curr_widgets.append(attack)
+    curr_widgets.append(charge)
+    curr_widgets.append(quit_fight)
+    curr_widgets.append(message)
+    curr_widgets.append(enemy_title)
+    curr_widgets.append(enemy_hp)
+
+    battle_sequence()
+
+screen_seq = [screen1, screen2, screen3]
 
 '''BACK-END COMPONENTS BELOW'''
 
@@ -152,7 +198,8 @@ generic_moves = {
 
     "attack":10,
     "charge":10,
-    "crit":None
+    "crit":(1, 5),
+    "miss":(1, 8)
 
 }
 
@@ -162,13 +209,23 @@ user_dict = {
     "fruit_name":None,
     "fruit_dict":None,
     "button":None,
-    "loading":None
+    "loading":None,
+    "health":100
+
+}
+
+enemy_dict = {
+
+    "name":None,
+    "fruit_name":None,
+    "fruit_dict":None,
+    "health":100
 
 }
 
 # HOST Functions
 
-def host_server(username, port): # FIXME: unknown causes loading ball and screen glitch
+def host_server(username, port): # FIXME: way to avoid blocking network search?
     '''
     Function: Creates a server for the host after receiving the username, port, and fruit.
     Activated by: screen1's host button widget.
@@ -180,7 +237,13 @@ def host_server(username, port): # FIXME: unknown causes loading ball and screen
 
     global user_dict, server
 
+    if server != None:
+
+        server = None
+
     if input_check(username, port, user_dict, curr_widgets[6], curr_widgets[7], curr_widgets[9]) == False:
+
+        curr_widgets[5].configure(command=None)
 
         user_dict["loading"] = "joining player."
 
@@ -190,55 +253,58 @@ def host_server(username, port): # FIXME: unknown causes loading ball and screen
         sent_fruitname = pickle.dumps(user_dict["fruit_name"]) # gets ready to send fruitname and transplants fruit stats
         user_dict["fruit_dict"] = copy.copy(generic_moves)
 
-        next_screen(0)
+        #next_screen(0)
 
         print('UI blocked by socket')
-
-        curr_widgets[1].configure(text="waiting for joining player")
 
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind((socket.gethostname(), int(port)))
         server.listen(1)
         #server.setblocking(False)
-        
+
+        try:
+
+                clientsocket, address = server.accept()
+                print("connection established")
+                #server.setblocking(False)
+                recv_pickle_user = clientsocket.recv(1024)
+                recv_username = pickle.loads(recv_pickle_user)
+                clientsocket.sendall(sent_username)
+                recv_pickle_fruit = clientsocket.recv(1024)
+                recv_fruit = pickle.loads(recv_pickle_fruit)
+                clientsocket.sendall(sent_fruitname)
+                print(f"{recv_username} has connected!")
+
+        except:
+                
+                curr_widgets[-1].configure(text="connection error")
+                print('server has stopped operating')
+                
+
+        #curr_widgets[1].configure(text="waiting for joining player")
+
+        else:
 
 
-        #try:
+                enemy_dict["name"] = recv_username
+                enemy_dict["fruit_name"] = recv_fruit
+                enemy_dict["fruit_dict"] = generic_moves
 
-        clientsocket, address = server.accept()
+                
+                #curr_widgets[1].configure(text=f"{recv_username} has connected")
 
-        #except BlockingIOError:
-
-        curr_widgets[1].configure(text="connected to joining player")
+                next_screen(1)
 
         '''else:
 
-            recv_pickle_user = clientsocket.recv(200)
-            recv_pickle_fruit = clientsocket.recv(200)
-            recv_username = pickle.loads(recv_pickle_user)
-            recv_fruit = pickle.loads(recv_pickle_fruit)
-            clientsocket.sendall(sent_username)
-            clientsocket.sendall(sent_fruitname)
+
 
             curr_widgets[1].configure(text=f"user {recv_username} wants to join! do you accept?")'''       
 
-def close_program(server):
-
-    print('close_program has been called')
-
-    if server == None:
-
-        root.destroy()
-
-    else:
-
-        server.close()
-        root.destroy
-
 # JOIN Functions
 
-def join_server(username, port): # FIXME: try statement causes loading ball and screen glitch.
+def join_server(username, port): # FIXME: way to avoid blocking network search?
     '''
     Function: Searches for and joins server after collecting username, port, and fruit.
     Activated by: screen1's join button widget.
@@ -260,18 +326,48 @@ def join_server(username, port): # FIXME: try statement causes loading ball and 
 
         user_dict["loading"] = "host."
 
-        next_screen(0)
+        #next_screen(0)
 
-        searching = True
+
+        #server.setblocking(False)
+
+        #searching = True
 
         #while searching:
             
-        #try: # somehow fucks up everything
-        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server.connect((socket.gethostname(), int(port)))
+        try:
+                
+                server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                
+                server.connect((socket.gethostname(), int(port)))
+                print("connected to host")
+                #server.setblocking(False)
+                server.sendall(sent_username)
+                recv_pickle_user = server.recv(1024)
+                recv_username = pickle.loads(recv_pickle_user)
+                server.sendall(sent_fruitname)
+                recv_pickle_fruit = server.recv(1024)
+                
+                recv_fruit = pickle.loads(recv_pickle_fruit)
+
+        except:
+
+                curr_widgets[-1].configure(text="connection error")
+                searching = False
+
+        else:
+
+                enemy_dict["name"] = recv_username
+                enemy_dict["fruit_name"] = recv_fruit
+                enemy_dict["fruit_dict"] = generic_moves
+        
+                print(f'host is {recv_username}')
+                #curr_widgets[1].configure(text=f"you have connected to {recv_username}")
+                next_screen(1)
         #except ConnectionRefusedError:
 
-        searching = False               
+                #searching = False             
 
 # GENERIC FUNCTIONS
 
@@ -396,6 +492,94 @@ def fruit_buttons(button, fruitname):
     user_dict["fruit_name"] = fruitname
     user_dict["fruit_dict"] = copy.copy(generic_moves)
     user_dict["button"] = button
+
+def t1():
+
+    time.sleep(1)
+
+def close_program(server):
+
+    print('close_program has been called')
+
+    if server == None:
+
+        root.destroy()
+
+    else:
+
+        server.close()
+        root.destroy()
+
+# BATTLE Functions
+
+def damage_move(move_set):
+    '''
+    Function: calculates stats of chosen move and formulates into dictionary to send out to client.
+    '''
+
+    global generic_moves
+
+    print('damage_move was called')
+
+    final = {
+
+        "miss":None,
+        "crit":None,
+        "total":0
+
+    }
+
+    miss_chance = random.choice(range(move_set["miss"][0], move_set["miss"][-1]+1))
+    if miss_chance != 1:
+        final["miss"] = False
+        crit_chance = random.choice(range(move_set["crit"][0], move_set["crit"][-1]+1))
+        if crit_chance != 1:
+            final["crit"] = False
+            final["total"] = move_set["attack"]
+            print(final)
+            return final
+        else:
+            final["crit"] = True
+            final["total"] += move_set["attack"] + 10
+            print(final)
+            return final
+    else:
+        final["miss"] = True
+        final["total"] = move_set["attack"]
+        print(final)
+        return final
+
+def user_move():
+    '''
+    Function: gives functionality to User's UI buttons to make move.
+    Activated by the calling of screen3 which calls battle_sequence that has while loop.
+    Followed by: recv_move() which listens for what enemy uses and the stats of the move. game stats are then affected.
+    '''
+
+    global user_dict, enemy_dict
+
+    print('user_move has been called')
+
+    curr_widgets[5].configure(text="what's your move?")
+    curr_widgets[2].configure(command=lambda: damage_move(user_dict["fruit_dict"]))
+
+    pass
+
+def battle_sequence():
+    '''
+    Function: While loop that continues the battle until either fruit's health is 0 or below.
+    '''
+
+    print('battle sequnece has been called')
+
+    battling = True
+
+    while battling:
+
+        user_move()
+        battling = False
+
+    pass
 
 '''TESTING CODE'''
 
