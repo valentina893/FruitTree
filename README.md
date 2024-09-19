@@ -2,4 +2,4 @@
 
 all iterations of my python project.
 
-plan to show to recruiters at a cs career fair at my university. wish me luck
+demo'd to recruiters at the 2024 Tech Fair at UIC.
